@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Árbol Genealógico · Familia López – Beltran</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Georgia, serif; background: #f5f0e8; min-height: 100vh; }
+
+  header { text-align: center; padding: 28px 20px 16px; }
+  header h1 { font-size: 24px; font-weight: normal; color: #3d2e1a; letter-spacing: 0.5px; }
+  header p  { font-size: 13px; color: #a09070; margin-top: 4px; font-style: italic; }
+
+  #tree-wrap { width: 100%; overflow-x: auto; padding: 16px 0 32px; }
+  svg { display: block; }
+  .pn { cursor: pointer; }
+
+  /* ── Modal hover ── */
+  #modal-overlay {
+    display: none; position: fixed; z-index: 300;
+    pointer-events: none;
+  }
+  #modal-overlay.open { display: block; }
+  #modal {
+    background: #faf7f2; border-radius: 16px; border: 1px solid #d4c9b0;
+    padding: 24px 20px 20px; width: 270px;
+    position: relative; text-align: center;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  }
+  #modal-close { display: none; }
+  #modal-avatar {
+    width: 220px; height: 220px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 60px; font-weight: bold;
+    margin: 0 auto 14px; border: 3px solid #c4b99a; overflow: hidden;
+  }
+  #modal-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+  #modal-name { font-size: 20px; color: #3d2e1a; margin-bottom: 3px; }
+  #modal-gen  { font-size: 12px; color: #8b7355; margin-bottom: 12px; }
+  #modal-bio  { font-size: 13px; color: #5c4a2e; line-height: 1.7; text-align: left; }
+
+  /* ── Leyenda ── */
+  #legend {
+    display: flex; flex-wrap: wrap; gap: 10px 20px;
+    justify-content: center; padding: 12px 20px 28px;
+  }
+  .leg-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6b5e42; }
+  .leg-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid transparent; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Árbol Genealógico</h1>
+  <p>Familia López – Beltran</p>
+</header>
+
+<div id="tree-wrap">
+  <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<div id="legend"></div>
+
+<!-- Modal hover -->
+<div id="modal-overlay">
+  <div id="modal">
+    <button id="modal-close">✕</button>
+    <div id="modal-avatar"></div>
+    <div id="modal-name"></div>
+    <div id="modal-gen"></div>
+    <div id="modal-bio"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  DATOS DE LA FAMILIA — editá aquí
+// ═══════════════════════════════════════════════════════
+
+// ESCALA: factor para comprimir horizontalmente y evitar scroll
+const ESCALA = 0.72;
+
+function sx(x) { return Math.round(x * ESCALA); }
+
+// Hermanos de Susana a la IZQUIERDA:
+// Orden izq→der: Gordo Garca (43) · Graciela Sanchez (44) · Susana (31)
+// Los abuelos Sanchez (23,24) se centran sobre los 3 hijos.
+// Bisabuelos Sanchez (13,14 y 15,16) se ajustan acordemente.
+const FAMILIA_RAW = {
+  personas: [
+    // ── BISABUELOS ──
+    { id:1,  nombre:"Padre de Mario",          generacion:0, x:140,  familia:"bovetti", nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:2,  nombre:"Maria   Gonela",             generacion:0, x:210,  familia:"bovetti", nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:3,  nombre:"Dionisio Echevarria",      generacion:0, x:315,  familia:"bovetti", nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:4,  nombre:"Madre de Dominga",         generacion:0, x:385,  familia:"bovetti", nacimiento:"", fallecimiento:"", descripcion:"Falleció al nacer Dominga.", foto:"" },
+    { id:5,  nombre:"Padre de Florentino",      generacion:0, x:490,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:6,  nombre:"Madre de Florentino",      generacion:0, x:560,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:7,  nombre:"Padre de Isolina",         generacion:0, x:665,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:8,  nombre:"Madre de Isolina",         generacion:0, x:735,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    // bisabuelos Sanchez — centrados sobre Oscar (x≈990) y Delia (x≈1150)
+    { id:13, nombre:"Manuel B. Sanchez",        generacion:0, x:930,  familia:"sanchez", nacimiento:"", fallecimiento:"", descripcion:"Fue policía en la época de los guapos, cuando la calle era picante. Con la idea de formar una familia, ése trabajo e ingreso como portero en un colegio, donde luego también trabajó María Angustia. Le encantaba reunir a todos en su casa, cocinar y disfrutar en familia. ", foto:"" },
+    { id:14, nombre:"María Angustia Torres",    generacion:0, x:1010, familia:"sanchez", nacimiento:"", fallecimiento:"", descripcion:"Llegó desde España con 20/21 años junto a su madre y hermana. Trabajó junto a Manuel en un colegio, eran muy queridos ambos por las maestras al punto que le enseñaron a leer y escribir. Tuvieron mucho tiempo intentando tener hijos. A los 40 años nació Oscar, 12 años después nació Alfredo. Fue una persona muy alegre, feliz, generosa y muy amorosa con su familia y nietos.", foto:"Angustia.jpg" },
+    { id:15, nombre:"Manuel   Perez",             generacion:0, x:1110, familia:"sanchez", nacimiento:"", fallecimiento:"", descripcion:"A los 6 años, viajó desde Lugo, España, hacia Argentina junto a padres y una hermana. Los trajeron dos hermanos que trabajaban en la construcción de un dique en el Rió Negro, con la fatalidad que a los ´pocos días de llegar los hermanos se ahogaron nadando en el río. Quedaron los abuelos y los niños en el lugar desconocido y tratando de superar esta desgracia. El padre murió de tristeza al poco tiempo, el abuelo fue boyero, aprendiendo mucho en La Pampa de los gauchos, muy trabajador y voluntarioso, hizo de todo. Finalmente, antes de casarse, ya había montado una pollería en la calle Tucumán y San Martín en el centro porteño. Trabajó ahi hasta que falleció el 3er hijo, momento en que sumido en una depresión decidió vender todo y dedicarse a la construcción de viviendas para alquilar.  Falleció de grande, siendo un gran abuelo y muy presente", foto:"ManuelP.jpg" },
+    { id:16, nombre:"Josefa Pedreira",          generacion:0, x:1190, familia:"sanchez", nacimiento:"", fallecimiento:"", descripcion:"Con 18/20 años llegó desde La Coruña, España, acompañada por dos hermanas. Trabajó en casas de familia hasta que se casó y comenzó a trabajar junto a Manuel. No era una persona muy demostrativa ni expresiva.", foto:"Josefa.jpg" },
+    { id:9,  nombre:"Raul Darío Beltran",       generacion:0, x:1340, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:10, nombre:"M. Luisa Gutierrez",       generacion:0, x:1415, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:11, nombre:"Jose    Bastos",              generacion:0, x:1510, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:12, nombre:"Marina Palacio",           generacion:0, x:1585, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    // ── ABUELOS ──
+    { id:17, nombre:"Mario Bovetti",            generacion:1, x:175,  familia:"bovetti", nacimiento:"", fallecimiento:"", descripcion:"", foto:"Mario.jpg" },
+    { id:18, nombre:"Dominga Echevarria",       generacion:1, x:350,  familia:"bovetti", nacimiento:"", fallecimiento:"", descripcion:"", foto:"Dominga.jpg" },
+    { id:19, nombre:"Florentino López",         generacion:1, x:525,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"Participó en la guerra civil español, pertenecía al escuadron que armaba las trincheras. Gracias a un amigo medico logró la baja anticipada en el ejercito. Debido a la hambruna de la post guerra, viajó solo a Argentina para establecerse, 2 años despúes viajó su esposa Isolina junto a sus hijos Francisco y Manuel", foto:"Florentino.jpg" },
+    { id:20, nombre:"Isolina Barbeito",         generacion:1, x:700,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"", foto:"Isolina.jpg" },
+    // Oscar y Delia centrados sobre sus 3 hijos (Gordo≈895, Graciela≈990, Susana≈1085) → centro≈990
+    { id:23, nombre:"Oscar Sanchez",            generacion:1, x:971,  familia:"sanchez", nacimiento:"", fallecimiento:"", descripcion:"", foto:"OscarS.jpg" },
+    { id:24, nombre:"Delia Perez",              generacion:1, x:1150, familia:"sanchez", nacimiento:"", fallecimiento:"", descripcion:"", foto:"Delia.jpg" },
+    { id:21, nombre:"Raul Dario Beltran",       generacion:1, x:1378, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"", foto:"Raul1.jpg" },
+    { id:22, nombre:"Marta Orfilia Bastos",     generacion:1, x:1547, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"", foto:"MartaO.jpg" },
+    // ── PADRES / TÍOS ──
+    { id:29, nombre:"Carlos Chuca",             generacion:2, x:158,  familia:"desconocido", nacimiento:"", fallecimiento:"", descripcion:"", foto:"" },
+    { id:28, nombre:"Graciela Bovetti",         generacion:2, x:228,  familia:"bovetti", nacimiento:"", fallecimiento:"", descripcion:"Hermana de Elsa.", foto:"" },
+    { id:25, nombre:"Elsa Beatriz Bovetti",     generacion:2, x:310,  familia:"bovetti", nacimiento:"", fallecimiento:"", descripcion:"", foto:"Bety.jpg" },
+    { id:26, nombre:"Francisco López Barbeito", generacion:2, x:528,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"El 29 de enero de 1955, con 9 años de edad, viajó desde Vigo hacia Argentina junto a su madre y hermano en un barco llamado HIGHLAND CHIEFTAIN", foto:"Paquito.jpg" },
+    { id:27, nombre:"Manuel López Barbeito",    generacion:2, x:682,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"Hermano de Francisco.", foto:"" },
+    // Hermanos de Susana a la izquierda: Gordo · Graciela · Susana (izq→der)
+    { id:43, nombre:"Gordo Garca",              generacion:2, x:895,  familia:"sanchez", nacimiento:"", fallecimiento:"", descripcion:"Hermano de Susana.", foto:"" },
+    { id:44, nombre:"Graciela Sanchez",         generacion:2, x:990,  familia:"sanchez", nacimiento:"", fallecimiento:"", descripcion:"Hermana de Susana.", foto:"" },
+    { id:31, nombre:"Susana Sanchez",           generacion:2, x:1085, familia:"sanchez", nacimiento:"", fallecimiento:"", descripcion:"", foto:"Susana.jpg" },
+    { id:30, nombre:"Raul Dario Beltran",       generacion:2, x:1455, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"", foto:"Raul.jpg" },
+    { id:32, nombre:"Monica Beltran",           generacion:2, x:1620, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"Hermana de Raul.", foto:"" },
+    // ── PABLO & VERÓNICA ──
+    { id:35, nombre:"Lorena Chuca",             generacion:3, x:193,  familia:"bovetti", nacimiento:"", fallecimiento:"", descripcion:"Prima de Pablo.", foto:"LoreChuca.jpg" },
+    { id:33, nombre:"Marcelo López",            generacion:3, x:383,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"Hermano de Pablo.", foto:"Marce.jpg" },
+    { id:34, nombre:"Pablo López",              generacion:3, x:572,  familia:"union",   nacimiento:"", fallecimiento:"", descripcion:"", foto:"Pablo.jpg" },
+    { id:36, nombre:"Verónica Beltran",         generacion:3, x:1085, familia:"union",   nacimiento:"", fallecimiento:"", descripcion:"", foto:"Vero.jpg" },
+    { id:37, nombre:"Pol Beltran",              generacion:3, x:1270, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"Hermano de Verónica.", foto:"" },
+    // ── HIJOS ──
+    { id:42, nombre:"Camila López Garro",       generacion:4, x:383,  familia:"lopez",   nacimiento:"", fallecimiento:"", descripcion:"Hija de Marcelo.", foto:"Cami.jpg" },
+    { id:38, nombre:"Catalina",                 generacion:4, x:780,  familia:"hijos",   nacimiento:"2012", fallecimiento:"", descripcion:"Hija de Pablo y Verónica.", foto:"Cata.jpg" },
+    { id:39, nombre:"Benicio",                  generacion:4, x:870,  familia:"hijos",   nacimiento:"2017", fallecimiento:"", descripcion:"Hijo de Pablo y Verónica.", foto:"Beni.jpg" },
+    { id:40, nombre:"Mora",                     generacion:4, x:1225, familia:"hijos",   nacimiento:"", fallecimiento:"", descripcion:"Hija de Pol.", foto:"" },
+    { id:41, nombre:"Aurora",                   generacion:4, x:1310, familia:"hijos",   nacimiento:"", fallecimiento:"", descripcion:"Hija de Pol.", foto:"" },
+    { id:47, nombre:"Agustín",                   generacion:3, x:1420, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"Hijo de Raul Dario Beltran.", foto:"" },
+    { id:48, nombre:"Magdalena",                   generacion:3, x:1500, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"Hijo de Raul Dario Beltran.", foto:"" },
+    { id:45, nombre:"Melina",                   generacion:3, x:1585, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"Hijo de Monica Beltran.", foto:"" },
+    { id:46, nombre:"Joaquin",                   generacion:3, x:1665, familia:"beltran", nacimiento:"", fallecimiento:"", descripcion:"Hijo de Monica Beltran.", foto:"" },
+  ],
+
+  parejas: [
+    [1,  2,   [17],        false],
+    [3,  4,   [18],        false],
+    [5,  6,   [19],        false],
+    [7,  8,   [20],        false],
+    [13, 14,  [23],        false],
+    [15, 16,  [24],        false],
+    [9,  10,  [21],        false],
+    [11, 12,  [22],        false],
+    [17, 18,  [28, 25],    false],
+    [19, 20,  [26, 27],    false],
+    [23, 24,  [43, 44, 31],false],   // hijos izq→der: Gordo, Graciela, Susana
+    [21, 22,  [30, 32],    false],
+    [30, null,[47, 48],    false],
+    [29, 28,  [35],        false],
+    [25, 26,  [33, 34],    false],
+    [33, null,[42],        false],
+    [31, 30,  [36, 37],    false],
+    [34, 36,  [38, 39],    true ],
+    [37, null,[40, 41],    false],
+    [32, null,[45, 46],    false],
+  ],
+
+  // colores por generación
+  colores: [
+    { color:"#7b68c8", fondo:"#e8e4f8", texto:"#3a2f7a" },
+    { color:"#4a8cbf", fondo:"#d6eaf8", texto:"#1a4f72" },
+    { color:"#4aab7a", fondo:"#d5f0e3", texto:"#1a5c3a" },
+    { color:"#c97d2e", fondo:"#fdebd0", texto:"#7d4a10" },
+    { color:"#b84fa0", fondo:"#f5d0ef", texto:"#6b1f5e" },
+  ],
+
+  generaciones: ["Tatarabuelos","Bisabuelos","Abuelos","Padres","Hijos"],
+};
+
+// ═══════════════════════════════════════════════════════
+//  MOTOR — aplicar escala y renderizar
+// ═══════════════════════════════════════════════════════
+const R = 20, GH = 140, OY = 60;
+const pmap = {};
+
+// Aplicar escala horizontal a todas las personas
+const FAMILIA = {
+  ...FAMILIA_RAW,
+  personas: FAMILIA_RAW.personas.map(p => ({ ...p, x: sx(p.x) }))
+};
+
+FAMILIA.personas.forEach(p => { p.y = OY + p.generacion * GH + R; pmap[p.id] = p; });
+
+function iniciales(n) {
+  return n.split(" ").slice(0,2).map(w => w[0]||"").join("").toUpperCase();
+}
+
+// ── Render SVG ──────────────────────────────────────────
+function render() {
+  const svg = document.getElementById("svg");
+  const maxX = Math.max(...FAMILIA.personas.map(p => p.x));
+  const W = maxX + 80;
+  const H = OY + 5 * GH + 20;
+
+  // Ajustar al ancho del viewport
+  svg.setAttribute("width",  W);
+  svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.style.maxWidth = "100%";
+  svg.style.width = W + "px";
+  svg.innerHTML = "";
+
+  // defs para clips de fotos
+  const defs = document.createElementNS("http://www.w3.org/2000/svg","defs");
+  FAMILIA.personas.forEach(p => {
+    if (!p.foto) return;
+    const clip = document.createElementNS("http://www.w3.org/2000/svg","clipPath");
+    clip.setAttribute("id","clip"+p.id);
+    const cc = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    cc.setAttribute("cx",p.x); cc.setAttribute("cy",p.y); cc.setAttribute("r",R);
+    clip.appendChild(cc); defs.appendChild(clip);
+  });
+  svg.appendChild(defs);
+
+  // ── líneas ──
+  const lineaG = document.createElementNS("http://www.w3.org/2000/svg","g");
+
+  function seg(x1,y1,x2,y2,col,sw,dash) {
+    const l = document.createElementNS("http://www.w3.org/2000/svg","line");
+    l.setAttribute("x1",x1); l.setAttribute("y1",y1);
+    l.setAttribute("x2",x2); l.setAttribute("y2",y2);
+    l.setAttribute("stroke", col||"#b8a87a");
+    l.setAttribute("stroke-width", sw||"1.5");
+    if (dash) l.setAttribute("stroke-dasharray", dash);
+    lineaG.appendChild(l);
+  }
+
+  FAMILIA.parejas.forEach(([id1,id2,hijos,esUnion]) => {
+    const p1 = pmap[id1];
+    const p2 = id2 ? pmap[id2] : null;
+    const ch = hijos.map(id => pmap[id]).filter(Boolean);
+    if (!p1 || ch.length === 0) return;
+
+    const topLine = p1.y + R;
+    const botLine = ch[0].y - R;
+    const lineY   = topLine + (botLine - topLine) * 0.5;
+
+    if (p2) {
+      const midX = (p1.x + p2.x) / 2;
+      const cPar = esUnion ? "#8fad6a" : "#c4b99a";
+      const wPar = esUnion ? "2.5" : "1.5";
+      seg(p1.x + R, p1.y, p2.x - R, p2.y, cPar, wPar, esUnion ? "5,3" : null);
+      if (esUnion) {
+        const ht = document.createElementNS("http://www.w3.org/2000/svg","text");
+        ht.setAttribute("x",midX); ht.setAttribute("y",p1.y+5);
+        ht.setAttribute("text-anchor","middle"); ht.setAttribute("font-size","13");
+        ht.setAttribute("fill","#c97d2e"); ht.textContent="♥";
+        lineaG.appendChild(ht);
+      }
+      seg(midX, topLine, midX, lineY);
+      const xs = [midX, ...ch.map(k => k.x)];
+      seg(Math.min(...xs), lineY, Math.max(...xs), lineY);
+      ch.forEach(k => seg(k.x, lineY, k.x, k.y - R));
+    } else {
+      seg(p1.x, topLine, p1.x, lineY);
+      const xs = [p1.x, ...ch.map(k => k.x)];
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      if (minX < maxX) seg(minX, lineY, maxX, lineY);
+      ch.forEach(k => seg(k.x, lineY, k.x, k.y - R));
+    }
+  });
+
+  svg.appendChild(lineaG);
+
+  // ── nodos ──
+  FAMILIA.personas.forEach(p => {
+    const fam = FAMILIA.colores[p.generacion] || FAMILIA.colores[0];
+    const {x, y} = p;
+    const g = document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.setAttribute("class","pn");
+    g.setAttribute("data-id",p.id);
+
+    const anillo = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    anillo.setAttribute("class","ring");
+    anillo.setAttribute("cx",x); anillo.setAttribute("cy",y); anillo.setAttribute("r",R+3);
+    anillo.setAttribute("fill",fam.fondo); anillo.setAttribute("stroke",fam.color); anillo.setAttribute("stroke-width","2.5");
+    g.appendChild(anillo);
+
+    if (p.foto) {
+      const im = document.createElementNS("http://www.w3.org/2000/svg","image");
+      im.setAttribute("href",p.foto);
+      im.setAttribute("x",x-R); im.setAttribute("y",y-R);
+      im.setAttribute("width",2*R); im.setAttribute("height",2*R);
+      im.setAttribute("preserveAspectRatio","xMidYMid slice");
+      im.setAttribute("clip-path",`url(#clip${p.id})`);
+      g.appendChild(im);
+    } else {
+      const circ = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      circ.setAttribute("cx",x); circ.setAttribute("cy",y); circ.setAttribute("r",R);
+      circ.setAttribute("fill",fam.fondo); g.appendChild(circ);
+      const ini = document.createElementNS("http://www.w3.org/2000/svg","text");
+      ini.setAttribute("x",x); ini.setAttribute("y",y+5); ini.setAttribute("text-anchor","middle");
+      ini.setAttribute("font-size","12"); ini.setAttribute("font-weight","bold");
+      ini.setAttribute("fill",fam.texto); ini.setAttribute("font-family","Georgia,serif");
+      ini.textContent = iniciales(p.nombre); g.appendChild(ini);
+    }
+
+    // nombre debajo
+    const words = p.nombre.split(" ");
+    let l1 = p.nombre, l2 = "";
+    if (p.nombre.length > 13) {
+      const h = Math.ceil(words.length/2);
+      l1 = words.slice(0,h).join(" "); l2 = words.slice(h).join(" ");
+    }
+    const txt = (t,dy) => {
+      const el = document.createElementNS("http://www.w3.org/2000/svg","text");
+      el.setAttribute("x",x); el.setAttribute("y",y+R+dy);
+      el.setAttribute("text-anchor","middle"); el.setAttribute("font-size","9");
+      el.setAttribute("fill","#3d2e1a"); el.setAttribute("font-weight","bold");
+      el.setAttribute("font-family","Georgia,serif");
+      el.textContent = t; g.appendChild(el);
+    };
+    txt(l1, l2?11:13); if(l2) txt(l2,22);
+    if (p.nacimiento) {
+      const bt = document.createElementNS("http://www.w3.org/2000/svg","text");
+      bt.setAttribute("x",x); bt.setAttribute("y",y+R+(l2?33:24));
+      bt.setAttribute("text-anchor","middle"); bt.setAttribute("font-size","8");
+      bt.setAttribute("fill","#8b7355"); bt.setAttribute("font-family","Georgia,serif");
+      bt.textContent = p.nacimiento + (p.fallecimiento?`–${p.fallecimiento}`:"");
+      g.appendChild(bt);
+    }
+
+    g.addEventListener("mouseenter", e => abrirModal(p.id));
+    g.addEventListener("mouseleave", () => cerrarModal());
+    svg.appendChild(g);
+  });
+
+  // etiquetas generación
+  FAMILIA.generaciones.forEach((lb,i) => {
+    const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x",8); t.setAttribute("y", OY+i*GH+R+4);
+    t.setAttribute("font-size","9"); t.setAttribute("fill","#a09070");
+    t.setAttribute("font-style","italic"); t.setAttribute("font-family","Georgia,serif");
+    t.textContent = lb; svg.appendChild(t);
+  });
+
+  // Ajustar el wrap al ancho real del SVG
+  fitToWindow(W);
+}
+
+function fitToWindow(svgW) {
+  const wrap = document.getElementById("tree-wrap");
+  const availW = window.innerWidth - 32; // margen
+  if (svgW <= availW) {
+    // entra sin scroll: escalar el SVG para que ocupe el ancho disponible
+    const svg = document.getElementById("svg");
+    svg.style.width  = "100%";
+    svg.style.height = "auto";
+    wrap.style.overflowX = "hidden";
+  } else {
+    wrap.style.overflowX = "auto";
+  }
+}
+
+// ── Modal (hover) ────────────────────────────────────────
+let closeTimer = null;
+
+function abrirModal(id) {
+  const p = pmap[id]; if (!p) return;
+  const fam = FAMILIA.colores[p.generacion] || FAMILIA.colores[0];
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+
+  const av = document.getElementById("modal-avatar");
+  av.style.background  = fam.fondo;
+  av.style.color       = fam.texto;
+  av.style.borderColor = fam.color;
+  av.innerHTML = p.foto
+    ? `<img src="${p.foto}" alt="${p.nombre}">`
+    : iniciales(p.nombre);
+
+  document.getElementById("modal-name").textContent = p.nombre;
+
+  let genTxt = FAMILIA.generaciones[p.generacion] || "";
+  if (p.nacimiento) genTxt += `  ·  ${p.nacimiento}${p.fallecimiento?" – "+p.fallecimiento:""}`;
+  document.getElementById("modal-gen").textContent = genTxt;
+  document.getElementById("modal-bio").textContent = p.descripcion || "";
+
+  const svgEl  = document.getElementById("svg");
+  const rect   = svgEl.getBoundingClientRect();
+  const vw     = window.innerWidth;
+  const vh     = window.innerHeight;
+  const mw     = 270;
+
+  const scaleX = rect.width  / parseFloat(svgEl.getAttribute("width"));
+  const scaleY = rect.height / parseFloat(svgEl.getAttribute("height"));
+  const nodeScreenX = rect.left + p.x * scaleX;
+  const nodeScreenY = rect.top  + p.y * scaleY;
+  const nodeR = (R + 3) * scaleX;
+
+  let left = nodeScreenX + nodeR + 12;
+  if (left + mw > vw - 10) left = nodeScreenX - nodeR - mw - 12;
+  left = Math.max(8, left);
+
+  const overlay = document.getElementById("modal-overlay");
+  overlay.classList.add("open");
+  const mh = overlay.querySelector("#modal").offsetHeight || 350;
+  let top = nodeScreenY - mh / 2;
+  top = Math.max(8, Math.min(top, vh - mh - 8));
+
+  overlay.style.left = left + "px";
+  overlay.style.top  = top  + "px";
+}
+
+function cerrarModal() {
+  closeTimer = setTimeout(() => {
+    document.getElementById("modal-overlay").classList.remove("open");
+  }, 120);
+}
+
+document.getElementById("modal-overlay").addEventListener("mouseenter", () => {
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+});
+document.getElementById("modal-overlay").addEventListener("mouseleave", cerrarModal);
+
+// ── Leyenda ──────────────────────────────────────────────
+function renderLeyenda() {
+  const div = document.getElementById("legend");
+  FAMILIA.generaciones.forEach((nombre, i) => {
+    const fam = FAMILIA.colores[i];
+    const item = document.createElement("div");
+    item.className = "leg-item";
+    item.innerHTML = `<div class="leg-dot" style="background:${fam.fondo};border-color:${fam.color}"></div>${nombre}`;
+    div.appendChild(item);
+  });
+}
+
+render();
+renderLeyenda();
+window.addEventListener("resize", () => {
+  const maxX = Math.max(...FAMILIA.personas.map(p => p.x));
+  fitToWindow(maxX + 80);
+});
+</script>
+</body>
+</html>
